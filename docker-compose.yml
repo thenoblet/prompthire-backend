@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: prompthire-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: prompthire
+    ports:
+      - "5432:5432"
+    volumes:
+      - prompthire_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d prompthire"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  prompthire_pg_data:
