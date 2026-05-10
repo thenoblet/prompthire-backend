@@ -1,6 +1,6 @@
 # PromptHire Backend
 
-FastAPI service that generates three role-specific interview questions for a 30-minute screening, given a job title. Built with a strict layered architecture, resilient LLM access (retries + multi-model fallback), Postgres-backed caching and rate limiting, and a typed wire envelope shared with the [PromptHire frontend](../prompthire-frontend).
+FastAPI service that generates three role-specific interview questions for a 30-minute screening, given a job title. Built with a strict layered architecture, resilient LLM access (retries + multi-model fallback), Postgres-backed caching and rate limiting, and a typed wire envelope shared with the [PromptHire frontend](https://github.com/thenoblet/prompthire-frontend).
 
 ## What this service does
 
