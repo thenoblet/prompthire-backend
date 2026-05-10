@@ -203,7 +203,8 @@ pip install -e . --no-deps                       # src-layout: register the `app
 docker compose up -d postgres
 
 # 4. Configure env
-cp .env.example .env                             # edit: LITELLM_MODEL, provider key, DATABASE_URL
+cp .env.example .env                             # edit: LITELLM_MODEL, provider key,
+                                                 #       DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME
                                                  # see Configuration section below
 
 # 5. Apply migrations  (only needed for local dev — Docker handles this in production)
@@ -232,8 +233,9 @@ The container is **self-deploying**: `entrypoint.sh` runs `alembic upgrade head`
 docker build -t prompthire-backend:dev .
 docker run --rm \
   -e LITELLM_MODEL=gemini/gemini-2.5-flash \
-  -e GEMINI_API_KEY=...  \
-  -e DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/prompthire \
+  -e GEMINI_API_KEY=... \
+  -e DB_HOST=postgres -e DB_PORT=5432 \
+  -e DB_USER=postgres -e DB_PASSWORD=... -e DB_NAME=prompthire \
   -p 8000:8000 \
   prompthire-backend:dev
 ```
@@ -268,7 +270,11 @@ All config is environment-driven via `pydantic-settings`. See `.env.example` for
 | `LITELLM_MODEL` | yes | — | Primary model id (e.g. `gemini/gemini-2.5-flash`). |
 | `LITELLM_FALLBACK_MODELS` | no | `""` | Comma-separated chain. Tried in order if primary exhausts retries. |
 | `<PROVIDER>_API_KEY` | yes | — | E.g. `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Loaded by `python-dotenv` into `os.environ` at startup so litellm picks them up. |
-| `DATABASE_URL` | yes | — | Async-driver URL: `postgresql+asyncpg://…` |
+| `DB_HOST` | yes | — | Postgres hostname (e.g. `localhost`, or service name in a Docker network). |
+| `DB_PORT` | no | `5432` | Postgres TCP port. |
+| `DB_USER` | yes | — | Postgres username. |
+| `DB_PASSWORD` | yes | — | Postgres password. URL-encoded automatically when the connection string is composed, so special characters are safe. |
+| `DB_NAME` | yes | — | Postgres database name. |
 | `RATE_LIMIT_PER_MIN` | no | `5` | Per-IP per-minute cap. |
 | `RATE_LIMIT_PER_DAY` | no | `20` | Per-IP per-day cap. |
 | `GLOBAL_DAILY_CAP` | no | `200` | Service-wide cap on LLM calls per UTC day (cache hits exempt). |

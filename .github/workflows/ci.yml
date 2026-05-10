@@ -42,9 +42,13 @@ jobs:
           --health-retries 10
 
     env:
-      # Required by Settings; uses the postgres service above.
+      # Required by Settings; points at the postgres service above.
       LITELLM_MODEL: gemini/gemini-2.5-flash
-      DATABASE_URL: postgresql+asyncpg://postgres:dev@localhost:5432/prompthire
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: dev
+      DB_NAME: prompthire
       # Provider key is not validated at startup — a placeholder is fine for
       # CI (we never make a real LLM call).
       GEMINI_API_KEY: ci-placeholder-not-used

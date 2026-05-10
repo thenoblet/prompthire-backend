@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import quote
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,6 +13,13 @@ class Settings(BaseSettings):
     singleton is retrieved via ``get_settings()`` which caches the instance with
     ``lru_cache`` to avoid repeated disk reads.
 
+    The database connection is composed from discrete fields (``DB_HOST``,
+    ``DB_PORT``, ``DB_USER``, ``DB_PASSWORD``, ``DB_NAME``) rather than a single
+    ``DATABASE_URL`` because deployment platforms (Dokploy, Render, etc.)
+    typically expose those as separate UI inputs. The asyncpg driver is hard-
+    wired into the composed URL so the rest of the codebase doesn't have to
+    branch on the connection string shape.
+
     Attributes:
         litellm_model: The primary litellm model identifier
             (e.g. ``"gemini/gemini-2.5-flash"``). Tried first on every request.
@@ -19,8 +27,13 @@ class Settings(BaseSettings):
             model identifiers tried in order if the primary exhausts retries.
             Each fallback gets its own tenacity retry budget. Empty disables
             fallback (primary-only).
-        database_url: SQLAlchemy async-compatible connection string
-            (e.g. ``"postgresql+asyncpg://..."``).
+        db_host: Postgres hostname or IP (e.g. ``"localhost"`` or
+            ``"prompthire-pg"`` inside a Docker network).
+        db_port: Postgres TCP port. Defaults to 5432.
+        db_user: Postgres username.
+        db_password: Postgres password. URL-encoded automatically when the
+            connection string is composed, so special characters are safe.
+        db_name: Postgres database name.
         cors_origins: Comma-separated list of allowed CORS origins. Defaults
             to the production frontend domain plus the Vite dev server so a
             fresh deploy and a fresh dev environment both work without the
@@ -53,7 +66,11 @@ class Settings(BaseSettings):
 
     litellm_model: str = Field(..., alias="LITELLM_MODEL")
     litellm_fallback_models: str = Field(default="", alias="LITELLM_FALLBACK_MODELS")
-    database_url: str = Field(..., alias="DATABASE_URL")
+    db_host: str = Field(..., alias="DB_HOST")
+    db_port: int = Field(default=5432, alias="DB_PORT")
+    db_user: str = Field(..., alias="DB_USER")
+    db_password: str = Field(..., alias="DB_PASSWORD")
+    db_name: str = Field(..., alias="DB_NAME")
     cors_origins: str = Field(
         default="https://prompthire.noblet.tech,http://localhost:5173",
         alias="CORS_ORIGINS",
@@ -67,6 +84,21 @@ class Settings(BaseSettings):
     request_budget_seconds: int = Field(default=45, alias="REQUEST_BUDGET_SECONDS")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     trust_forwarded_for: bool = Field(default=False, alias="TRUST_FORWARDED_FOR")
+
+    @property
+    def database_url(self) -> str:
+        """Compose the asyncpg-driver Postgres URL from the discrete DB_* fields.
+
+        Password is URL-encoded so special characters (``@``, ``/``, ``:``,
+        ``%`` and friends) survive the round-trip. The asyncpg driver is
+        hard-wired so the rest of the codebase can use this string as an
+        opaque async-compatible connection string.
+        """
+        password = quote(self.db_password, safe="")
+        return (
+            f"postgresql+asyncpg://{self.db_user}:{password}@"
+            f"{self.db_host}:{self.db_port}/{self.db_name}"
+        )
 
     @property
     def cors_origins_list(self) -> list[str]:
