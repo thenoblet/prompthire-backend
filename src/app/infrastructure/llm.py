@@ -6,8 +6,6 @@ actually answered. Callers never see the Pydantic shape used to coerce the
 model output.
 """
 
-
-
 import logging
 from dataclasses import dataclass
 
