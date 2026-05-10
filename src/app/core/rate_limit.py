@@ -37,6 +37,10 @@ def make_rate_limiter(
         session: SessionDep,
         settings: SettingsDep,
     ) -> None:
+        # Operator kill-switch — short-circuit without touching the DB so a
+        # disabled limiter doesn't even consume a connection.
+        if not settings.rate_limit_enabled:
+            return
         ip = _client_ip(request, settings.trust_forwarded_for)
         repo = RateLimitRepository(session)
         try:

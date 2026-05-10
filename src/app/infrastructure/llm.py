@@ -6,6 +6,9 @@ actually answered. Callers never see the Pydantic shape used to coerce the
 model output.
 """
 
+# LITELLM_MODEL=gemini/gemini-2.5-flash
+# LITELLM_FALLBACK_MODELS=openrouter/poolside/laguna-m.1:free,openrouter/meta-llama/llama-3.1-8b-instruct:free
+
 import logging
 from dataclasses import dataclass
 

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
             fresh deploy and a fresh dev environment both work without the
             operator setting the env var. An empty string disables CORS.
             Parsed into a list via ``cors_origins_list``.
+        rate_limit_enabled: Operator kill-switch. When ``False`` the rate-limit
+            dependency short-circuits (no counters incremented, no checks).
+            Defaults to ``True``; set to ``False`` for demos or local testing.
         rate_limit_per_min: Maximum requests a single IP may make per minute
             on the generate route.
         rate_limit_per_day: Maximum requests a single IP may make per day
@@ -75,6 +78,7 @@ class Settings(BaseSettings):
         default="https://prompthire.noblet.tech,http://localhost:5173",
         alias="CORS_ORIGINS",
     )
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
     rate_limit_per_min: int = Field(default=5, alias="RATE_LIMIT_PER_MIN")
     rate_limit_per_day: int = Field(default=20, alias="RATE_LIMIT_PER_DAY")
     global_daily_cap: int = Field(default=200, alias="GLOBAL_DAILY_CAP")
