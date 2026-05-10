@@ -1,9 +1,11 @@
+import asyncio
 import logging
 import time
 
 from app.core.exceptions import (
     BadShapeError,
     DatabaseUnavailableError,
+    RequestTimeoutError,
     ServiceAtCapacityError,
     UpstreamError,
 )
@@ -37,6 +39,7 @@ class QuestionService:
         cache_enabled: bool,
         cache_ttl_hours: int,
         global_daily_cap: int,
+        request_budget_seconds: int,
     ) -> None:
         """Wire up the service with its dependencies and configuration.
 
@@ -51,6 +54,10 @@ class QuestionService:
             cache_ttl_hours: TTL in hours for newly written cache entries.
             global_daily_cap: Maximum number of LLM calls allowed per day
                 service-wide. Cache hits do not count against this cap.
+            request_budget_seconds: Wallclock budget for the LLM chain. When
+                exceeded the LLM call is cancelled and ``RequestTimeoutError``
+                is raised so the user does not wait through the full retry +
+                fallback worst case.
         """
         self._llm = llm
         self._audit = audit
@@ -59,6 +66,7 @@ class QuestionService:
         self._cache_enabled = cache_enabled
         self._cache_ttl_hours = cache_ttl_hours
         self._global_daily_cap = global_daily_cap
+        self._request_budget_seconds = request_budget_seconds
 
     async def generate(self, role: str) -> list[Question]:
         """Generate three interview questions for the given role.
@@ -79,6 +87,9 @@ class QuestionService:
         Raises:
             DatabaseUnavailableError: When the global cap read fails.
             ServiceAtCapacityError: When the global daily cap has been reached.
+            RequestTimeoutError: When the LLM chain exceeds
+                ``request_budget_seconds`` wallclock; the in-flight call is
+                cancelled.
             BadShapeError: When the LLM returns a response that fails schema
                 validation (propagated from ``LLMClient``).
             UpstreamError: When the LLM provider is unreachable or fails after
@@ -114,10 +125,22 @@ class QuestionService:
             )
             raise ServiceAtCapacityError()
 
-        # 3. LLM call. May fall back to a secondary model — result.model
-        # records which one actually answered.
+        # 3. LLM call, bounded by the request wallclock budget. May fall back
+        # to a secondary model — result.model records which one actually
+        # answered. asyncio.wait_for cancels the in-flight task on timeout
+        # so we don't keep paying for retries the user is no longer waiting on.
         try:
-            result = await self._llm.generate(normalized)
+            result = await asyncio.wait_for(
+                self._llm.generate(normalized),
+                timeout=self._request_budget_seconds,
+            )
+        except TimeoutError as e:
+            logger.warning(
+                "request budget exceeded budget=%ss; aborting LLM chain",
+                self._request_budget_seconds,
+            )
+            await self._record_failure(normalized, start, "upstream_err", e)
+            raise RequestTimeoutError() from None
         except BadShapeError as e:
             await self._record_failure(normalized, start, "bad_shape", e)
             raise

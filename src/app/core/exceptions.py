@@ -98,3 +98,19 @@ class ServiceAtCapacityError(GenerationError):
     user_message = "Service has reached today's capacity. Please try again tomorrow."
     severity = "warning"
     retryable = False
+
+
+class RequestTimeoutError(GenerationError):
+    """Raised when a request exceeds the wallclock budget for the LLM chain.
+
+    Distinct from ``UpstreamError`` because the cause is local — the service
+    decided to give up after ``REQUEST_BUDGET_SECONDS`` rather than continue
+    retrying or rolling over to further fallbacks. Surfaced as HTTP 504
+    with code ``REQUEST_TIMEOUT``; the frontend can offer a retry.
+    """
+
+    code = "REQUEST_TIMEOUT"
+    http_status = 504
+    user_message = "The request took too long. Please try again."
+    severity = "warning"
+    retryable = True

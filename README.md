@@ -188,6 +188,8 @@ Migration `0001_initial.py` creates `generations` + `rate_limit_buckets`. Migrat
 
 ## Setup
 
+### Local development
+
 ```bash
 # 1. Clone and create venv
 python3.11 -m venv .venv
@@ -204,7 +206,7 @@ docker compose up -d postgres
 cp .env.example .env                             # edit: LITELLM_MODEL, provider key, DATABASE_URL
                                                  # see Configuration section below
 
-# 5. Apply migrations
+# 5. Apply migrations  (only needed for local dev — Docker handles this in production)
 alembic upgrade head
 
 # 6. Run
@@ -220,6 +222,41 @@ curl -s http://localhost:8000/healthz | jq
 curl -s -X POST http://localhost:8000/api/v1/generate \
   -H "content-type: application/json" \
   -d '{"role": "Senior Backend Engineer"}' | jq
+```
+
+### Docker / production
+
+The container is **self-deploying**: `entrypoint.sh` runs `alembic upgrade head` and then `exec`s the CMD (uvicorn). Pull the new image, start it, and the schema migrates itself before the first request lands.
+
+```bash
+docker build -t prompthire-backend:dev .
+docker run --rm \
+  -e LITELLM_MODEL=gemini/gemini-2.5-flash \
+  -e GEMINI_API_KEY=...  \
+  -e DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/prompthire \
+  -p 8000:8000 \
+  prompthire-backend:dev
+```
+
+What that one `docker run` does:
+
+1. `entrypoint.sh` runs `alembic upgrade head` — idempotent; no-op if already at head.
+2. Logs `[entrypoint] Migrations applied. Starting application: …`.
+3. `exec`s into uvicorn so `SIGTERM` from `docker stop` reaches the app directly and shutdown is graceful.
+
+If a migration fails, the container exits non-zero and the orchestrator's restart policy applies. **Trade-off worth knowing:** in a multi-instance deploy (e.g. multiple replicas behind a load balancer) every replica races to apply the same migration. Acceptable for single-instance Dokploy deploys; for multi-instance the right answer is a separate "migrate" job in the deploy pipeline. See `entrypoint.sh` for the full script.
+
+**Operator escape hatches** (when you need to bypass the auto-migrate or roll back):
+
+```bash
+# drop into a shell, no migrations
+docker run --rm -it --entrypoint /bin/sh prompthire-backend:dev
+
+# roll back one migration without starting the app
+docker run --rm --entrypoint alembic prompthire-backend:dev downgrade -1
+
+# the entrypoint still runs first, but CMD is overridable for one-off ops
+docker run --rm prompthire-backend:dev alembic current
 ```
 
 ## Configuration
@@ -264,6 +301,7 @@ If a reviewer is scrolling, these are the spots that demonstrate non-obvious thi
 - **`src/app/repositories/rate_limit_repository.py`** — three atomic UPSERT counters (minute / day / global) with `RETURNING count` so we never read-then-write.
 - **`src/app/schemas/response.py`** — single `ApiResponse[T]` + `ErrorResponse` envelope used by every route; consistent shape regardless of payload.
 - **`src/app/main.py`** — composition root; only place where `DatabaseManager` and `LLMClient` are constructed; loads `.env` into `os.environ` so litellm sees provider keys.
+- **`entrypoint.sh` + `Dockerfile`** — self-deploying container: migrations run on container start before uvicorn. `exec "$@"` so `SIGTERM` reaches the app directly. The CMD remains overridable for operator one-offs.
 
 ## Frontend integration
 

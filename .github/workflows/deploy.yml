@@ -1,0 +1,94 @@
+# =============================================================================
+# PromptHire Backend - Deploy
+# =============================================================================
+# Builds the Docker image, pushes to ghcr.io, and triggers Dokploy.
+# Runs CI checks in parallel with the image build; deploy is gated on both.
+#
+# Required repo secrets:
+#   DOKPLOY_WEBHOOK_URL
+# =============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Run CI checks in parallel with the Docker build. The Dokploy webhook
+  # waits on both: CI must pass AND the image must be pushed before deploy.
+  # ---------------------------------------------------------------------------
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  # ---------------------------------------------------------------------------
+  # Build & push the Docker image (parallel with CI; not gated on it).
+  # The image lands in ghcr.io tagged by SHA and `latest` regardless of CI
+  # outcome — Dokploy is the actual deploy gate below.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  # ---------------------------------------------------------------------------
+  # Fire the Dokploy webhook only after BOTH ci and build succeed.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: [ci, build]
+
+    steps:
+      - name: Deploy to Dokploy
+        run: |
+          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ref": "${{ github.sha }}"}'
+
+      - name: Deployment notification
+        if: success()
+        run: echo "PromptHire backend deployment triggered successfully."

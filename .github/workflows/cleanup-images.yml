@@ -1,0 +1,47 @@
+# =============================================================================
+# PromptHire Backend - Container Image Cleanup
+# =============================================================================
+# Prunes old ghcr.io image versions to keep registry storage bounded.
+# Runs weekly and is also manually triggerable.
+#
+# Strategy:
+#   1. Delete every untagged version (left behind whenever a push moves the
+#      `latest` tag to a new SHA — the previous version becomes untagged
+#      and is pure dead weight).
+#   2. Keep only the 30 most recent tagged versions overall — older
+#      `<sha>` tags are pruned. SHA tags are immutable, so any commit you
+#      might still want to redeploy in the next month survives.
+#
+# If you want stricter retention or longer history, raise
+# `min-versions-to-keep`.
+# =============================================================================
+
+name: Cleanup Container Images
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # 04:00 UTC every Monday
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  prune:
+    name: Prune ghcr.io image versions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete untagged versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: container
+          delete-only-untagged-versions: true
+
+      - name: Keep only the 30 most recent tagged versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: container
+          min-versions-to-keep: 30

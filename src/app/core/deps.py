@@ -46,6 +46,7 @@ def get_question_service(
         cache_enabled=settings.cache_enabled,
         cache_ttl_hours=settings.cache_ttl_hours,
         global_daily_cap=settings.global_daily_cap,
+        request_budget_seconds=settings.request_budget_seconds,
     )
 
 
