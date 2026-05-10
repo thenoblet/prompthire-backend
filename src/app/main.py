@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
         app.state.llm = LLMClient(
             model=settings.litellm_model,
             timeout_seconds=settings.litellm_timeout_seconds,
+            fallback_models=settings.litellm_fallback_models_list,
         )
         try:
             yield

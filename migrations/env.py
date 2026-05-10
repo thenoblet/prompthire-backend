@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Importing the ORM modules registers their tables on Base.metadata.
 import app.models.db.generation  # noqa: F401
+import app.models.db.global_daily_count  # noqa: F401
+import app.models.db.question_cache  # noqa: F401
 import app.models.db.rate_limit_bucket  # noqa: F401
+import app.models.db.rate_limit_daily  # noqa: F401
 from app.core.config import get_settings
 from app.models.db.base import Base
 

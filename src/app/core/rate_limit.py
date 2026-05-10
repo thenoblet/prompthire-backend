@@ -25,7 +25,12 @@ def _client_ip(request: Request, trust_forwarded_for: bool) -> str:
 def make_rate_limiter(
     route: str,
 ) -> Callable[..., Coroutine[Any, Any, None]]:
-    """Build a FastAPI dependency that rate-limits requests by IP for a given route key."""
+    """Build a FastAPI dependency that enforces per-IP minute AND day caps.
+
+    Both counters increment on every call; the comparison happens after the
+    UPSERT so concurrent requests resolve atomically. Either window over
+    its cap raises RateLimitedError (429).
+    """
 
     async def _dep(
         request: Request,
@@ -35,10 +40,13 @@ def make_rate_limiter(
         ip = _client_ip(request, settings.trust_forwarded_for)
         repo = RateLimitRepository(session)
         try:
-            outcome = await repo.hit(ip, route)
+            minute = await repo.hit(ip, route)
+            daily = await repo.hit_daily(ip, route)
         except SQLAlchemyError as e:
             raise DatabaseUnavailableError() from e
-        if outcome.count > settings.rate_limit_per_min:
+        if minute.count > settings.rate_limit_per_min:
+            raise RateLimitedError()
+        if daily.count > settings.rate_limit_per_day:
             raise RateLimitedError()
 
     return _dep

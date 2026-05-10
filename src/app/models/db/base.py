@@ -11,4 +11,11 @@ NAMING_CONVENTION = {
 
 
 class Base(DeclarativeBase):
+    """SQLAlchemy declarative base shared by all ORM models.
+
+    Attaches a ``MetaData`` instance with a consistent naming convention so
+    that Alembic-generated constraint names are deterministic and portable
+    across databases.
+    """
+
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
