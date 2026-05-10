@@ -50,7 +50,7 @@ class LLMResult:
 
 def _litellm():
     # Imported lazily to avoid heavy import-time cost (litellm pulls in many providers).
-    import litellm  # noqa: PLC0415
+    import litellm
 
     litellm.drop_params = True
     return litellm
